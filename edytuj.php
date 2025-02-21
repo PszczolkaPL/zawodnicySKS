@@ -4,10 +4,12 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
     <title>Add Players</title>
 </head>
 <body>
     <?php
+    session_start();
     //Connect to database
         //databse credentials
         $dataBase = "zawodnicy";
@@ -21,25 +23,29 @@
             die("Connection failed: " . $mysqlConnect->connect_error);
         }
 
+        function handleSuccess($message) {
+            $_SESSION['success_message'] = $message;
+            header("Location: " . $_SERVER['PHP_SELF']); 
+            exit();
+        }
 
-        function displayMessage($message){
-            echo "<p class='success-message'>$message</p>";
-            echo '<script>
-                var successMessage = document.querySelector(".success-message");
-                if (successMessage) {
-                    //clear inputs
-                    document.querySelectorAll("input").forEach(function(input) {
-                        input.value = "";
-                    });
-                    setTimeout(function() {
-                        successMessage.style.display = "none";
-                    }, 2000);
-                }</script>';
-            header("Location: " . $_SERVER['PHP_SELF']);
+        function displayMessage(){
+            if (isset($_SESSION['success_message'])) {
+                echo "<p class='success-message'>" . $_SESSION['success_message'] . "</p>";
+                unset($_SESSION['success_message']);
+                echo '<script>
+                        setTimeout(function() {
+                            var successMessage = document.querySelector(".success-message");
+                            if (successMessage) {
+                                successMessage.style.display = "none"; // Hide the message after 2 seconds
+                            }
+                        }, 2000); // Adjust the timeout duration as needed
+                      </script>';
+            }
         }
     ?>
     <div>
-    <h3>Add new player</h3>
+        <h3>Add Player</h3>
         <form method="post" action="" class="form">
             
             <input id="name" type="text" name="name" placeholder="Name" required>
@@ -51,11 +57,14 @@
 
             <button type="submit" name="submit">Add Player</button>
 
-            <button type="submit" name="edit">Edit Player</button>
-            <button type="submit" name="delete">Delete Player</button>
+            <input list="users" name="Choose User" id="userSelected">
+
+            <button type="submit" name="edit">Edit</button>
+            <button type="submit" name="delete">Delete</button>
+            <input type="hidden" id="userId" name="userId">
+
         </form>
     </div>
-
         <?php
             //inputs from form
             $table = "zawodnicy";
@@ -82,55 +91,17 @@
 
                 //check if insert was successful
                 if ( $sqlInsert->execute() ) {
-                    displayMessage("Player was added successfully");
+                    handleSuccess("Player was added successfully");
                 } else {
                     //display error message
                     echo "Error: ". $sqlInsert->error;
                 }
                 $sqlInsert->close();
-            }   
-        ?>
-    <div>
-        <script>
-            //display selected value in inputs
-            document.getElementById("userSelected").addEventListener("change", function() {
-                var userDetails = this.value.trim().split(" ");
-                var name = userDetails[0];
-                var surname = userDetails[1];
-                var classNumber = userDetails[2];
-                var birthdate = userDetails[3];
-                var height = userDetails[4];
-                var id = this.selectedOptions[0].dataset.id;
+            }
 
-                document.getElementById("name").value = name;
-                document.getElementById("surname").value = surname; 
-                document.getElementById("class").value = classNumber;
-                document.getElementById("birthdate").value = birthdate;
-                document.getElementById("height").value = height;
-                document.getElementById("playerID").value = id; // Set the hidden ID input
-            });
-        </script>
-        <input list="users" name="Choose User" id="userSelected">
-        <datalist id="users">
-            <?php
-                //display all users and add them to datalist
-                $sqlOptionUsers = "SELECT * FROM $table";
-                $result = $mysqlConnect->query($sqlOptionUsers);
-
-                if ($result->num_rows > 0) {
-                    while ($row = $result->fetch_assoc()) {
-                        echo "<option id='option" . $row["id"] . "' value='" . $row["imie"] . " " . $row["nazwisko"] . " " . $row["klasa"] . " " . $row["rokurodzenia"] . " " . $row["wzrost"] . "' data-id='" . $row["id"] . "'></option>";
-                    }
-                } else {
-                    echo "0 results";
-                }
-            ?>
-        </datalist>
-
-        <?php
-        //edit player in database
-            if (isset($_POST["edit"]) && isset($_POST["playerID"])) {
-                $id = $_POST["playerID"];
+            //Edit selected player
+            if (isset($_POST["edit"])) {
+                $id = $_POST['userId'];
 
                 $name = $_POST["name"];
                 $surname = $_POST["surname"];
@@ -143,23 +114,22 @@
                 $sqlUpdate->bind_param("ssissi", $name, $surname, $class, $birthdate, $height, $id);
 
                 if ( $sqlUpdate->execute() ) {
-                    displayMessage("Player was added successfully");
+                    handleSuccess("Player was added successfully");
                 } else {
                     echo "Error: ". $sqlUpdate->error;
                 }
                 $sqlUpdate->close();
             }
-        ?>
 
-
-        <?php
             //delete player from database
             if ( isset( $_POST["delete"] ) ) {
-                $id = $_POST["playerID"];
+                $id = $_POST["userId"];
+
                 $sqlDelete = $mysqlConnect->prepare("DELETE FROM $table WHERE id = ?");
                 $sqlDelete->bind_param("i", $id);
+
                 if ( $sqlDelete->execute() ) {
-                    displayMessage("Player was deleted successfully");
+                    handleSuccess("Player was deleted successfully");
                 } else {
                     echo "Error: ". $sqlDelete->error;
                 }
@@ -168,11 +138,58 @@
         ?>
 
 
-    </div>
+        <datalist id="users">
+            <?php
+                //display all users and add them to datalist
+                $sqlOptionUsers = "SELECT * FROM $table";
+                $result = $mysqlConnect->query($sqlOptionUsers);
 
-    <script src="scriptEdytuj.js"></script>
+                if ($result->num_rows > 0) {
+                    while ($row = $result->fetch_assoc()) {
+                        echo "<option id='" . $row["id"] . "' value='" . $row["imie"] . " " . $row["nazwisko"] . " " . $row["klasa"] . " " . $row["rokurodzenia"] . " " . $row["wzrost"] . " " . $row["id"] . "'></option>";
+                    }
+                } else {
+                    echo "0 results";
+                }
+            ?>
+        </datalist>
+        <script>
+            //display selected value in inputs
+            const playerList = document.getElementById("userSelected");
+            playerList.addEventListener("change", function() {
+                var userDetails = this.value.trim().split(" ");
+                
+                var name = userDetails[0];
+                var surname = userDetails[1];
+                var classNumber = userDetails[2];
+                var birthdate = userDetails[3];
+                var height = userDetails[4];
+                var userId = userDetails[5];
+
+                document.getElementById("name").value = name;
+                document.getElementById("surname").value = surname; 
+                document.getElementById("class").value = classNumber;
+                document.getElementById("birthdate").value = birthdate;
+                document.getElementById("height").value = height;
+                document.getElementById("userId").value = userId;
+            });
+
+
+            const editButton = document.getElementById("edit");
+            const deleteButton = document.getElementById("delete");
+            
+            if(playerList.value === "") {
+                editButton.disabled = true;
+                editButton.style.color = "gray";
+
+                deleteButton.disabled = true;
+                deleteButton.style.color = "gray";
+            }
+        </script>
+
     <?php
         //close connection with database
+        displayMessage();
         $mysqlConnect->close();
     ?>
 </body>
